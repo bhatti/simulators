@@ -1,0 +1,1 @@
+streamlit run capacity_planning_simulator.py
