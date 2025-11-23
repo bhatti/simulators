@@ -1,0 +1,15 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#FF6B6B','primaryTextColor':'#fff','primaryBorderColor':'#C92A2A','lineColor':'#FA5252','secondaryColor':'#339AF0','tertiaryColor':'#51CF66','fontSize':'16px'}}}%%
+graph TD
+    A[Normal Operation<br/>Base Latency: 50ms] -->|Transient Spike| B[Increased Latency<br/>100ms]
+    B -->|Timeouts Begin| C[Retry Storm<br/>2x Load]
+    C -->|Coordination Cost| D[Higher Latency<br/>200ms]
+    D -->|More Timeouts| E[More Retries<br/>4x Load]
+    E -->|Metastable State| F[Sustained Degradation<br/>Even after spike ends]
+    F -->|Positive Feedback| C
+    
+    style A fill:#51CF66,stroke:#2F9E44,stroke-width:3px
+    style B fill:#FCC419,stroke:#F59F00,stroke-width:3px
+    style C fill:#FF8787,stroke:#FA5252,stroke-width:3px
+    style D fill:#FF6B6B,stroke:#F03E3E,stroke-width:3px
+    style E fill:#E03131,stroke:#C92A2A,stroke-width:3px
+    style F fill:#C92A2A,stroke:#862E2E,stroke-width:4px

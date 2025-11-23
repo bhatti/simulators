@@ -1,0 +1,44 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#FF6B6B','primaryTextColor':'#fff','primaryBorderColor':'#C92A2A','lineColor':'#FA5252','secondaryColor':'#339AF0','tertiaryColor':'#51CF66','fontSize':'16px'}}}%%
+sequenceDiagram
+    participant C as Client
+    participant R1 as Replica 1
+    participant R2 as Replica 2
+    participant R3 as Replica 3
+    participant R4 as Replica 4
+    participant R5 as Replica 5
+    
+    Note over C,R5: Write with Quorum (W=3)
+    C->>R1: Write v=100
+    C->>R2: Write v=100
+    C->>R3: Write v=100
+    R1-->>C: ACK
+    R2-->>C: ACK
+    R3-->>C: ACK
+    Note over C: Write succeeds<br/>(quorum reached)
+    
+    Note over C,R5: Read with Quorum (R=3)
+    C->>R2: Read
+    C->>R3: Read
+    C->>R4: Read
+    R2-->>C: v=100
+    R3-->>C: v=100
+    R4-->>C: v=old
+    Note over C: Return v=100<br/>(latest from overlap)
+    
+    rect rgb(255, 107, 107, 0.2)
+        Note over C,R5: Network Partition
+        Note over R1,R2: Partition 1 (minority)
+        Note over R3,R5: Partition 2 (majority) %% FIXED: Changed R3,R4,R5 to R3,R5
+    end
+    
+    C->>R3: Write v=200
+    C->>R4: Write v=200
+    C->>R5: Write v=200
+    R3-->>C: ACK
+    R4-->>C: ACK
+    R5-->>C: ACK
+    Note over C: Write succeeds<br/>(quorum in majority)
+    
+    C->>R1: Write v=300
+    C->>R2: Write v=300
+    Note over C: Write FAILS<br/>(cannot reach quorum)

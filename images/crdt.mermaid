@@ -1,0 +1,21 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#4D9DE0','primaryTextColor':'#fff','primaryBorderColor':'#1976D2','lineColor':'#2196F3','secondaryColor':'#00C9A7','tertiaryColor':'#FFA500','fontSize':'16px'}}}%%
+stateDiagram-v2
+    direction LR
+    
+    [*] --> R1: Replica 1
+    [*] --> R2: Replica 2
+    [*] --> R3: Replica 3
+    
+    state "R1: {1:5}" as R1
+    state "R2: {2:3}" as R2
+    state "R3: {3:7}" as R3
+    
+    R1 --> M1: Merge R1+R2
+    R2 --> M1
+    state "Merged: {1:5, 2:3}" as M1
+    
+    M1 --> M2: Merge +R3
+    R3 --> M2
+    state "Converged: {1:5, 2:3, 3:7}<br/>Total = 15" as M2
+    
+    M2 --> [*]: All replicas converge

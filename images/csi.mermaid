@@ -1,0 +1,21 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#E63946','primaryTextColor':'#fff','primaryBorderColor':'#B71C1C','lineColor':'#F77F00','secondaryColor':'#06FFA5','tertiaryColor':'#4D9DE0','fontSize':'16px'}}}%%
+graph TB
+    subgraph "System A (Working)"
+        A1[Schema: timestamp as long<br/>Encoding: UTF-8<br/>Config: timeout=30s]
+    end
+    
+    subgraph "System B (Working)"
+        B1[Schema: timestamp as Timestamp<br/>Encoding: Latin-1<br/>Config: timeout=60s]
+    end
+    
+    A1 -->|Data Plane| DP[Metadata Mismatch<br/>❌ Type confusion]
+    A1 -->|Data Plane| DE[Encoding Conflict<br/>❌ Silent corruption]
+    A1 -->|Management Plane| MP[Config Incoherence<br/>❌ Ignored settings]
+    A1 -->|Control Plane| CP[API Semantic Violation<br/>❌ Sync/Async mismatch]
+    
+    style A1 fill:#06FFA5,stroke:#00C49A,stroke-width:3px
+    style B1 fill:#4D9DE0,stroke:#1976D2,stroke-width:3px
+    style DP fill:#E63946,stroke:#B71C1C,stroke-width:3px
+    style DE fill:#F77F00,stroke:#D65A00,stroke-width:3px
+    style MP fill:#FCBF49,stroke:#F0A000,stroke-width:3px
+    style CP fill:#FF006E,stroke:#C0004E,stroke-width:3px

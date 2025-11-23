@@ -1,0 +1,22 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#339AF0','primaryTextColor':'#fff','primaryBorderColor':'#1864AB','lineColor':'#4D9DE0','secondaryColor':'#845EC2','tertiaryColor':'#00C9A7','fontSize':'16px'}}}%%
+graph LR
+    A[Linearizable<br/>R=W=N] -->|Relax to| B[Strong Consistent<br/>R+W>N]
+    B -->|Relax to| C[Eventual<br/>Async replication]
+    C -->|Add structure| D[CRDTs<br/>Provable convergence]
+    
+    A -.->|Cost| A1[Highest latency<br/>Lowest availability]
+    B -.->|Cost| B1[High latency<br/>Quorum overhead]
+    C -.->|Cost| C1[Temporary inconsistency<br/>Complex conflict resolution]
+    D -.->|Cost| D1[Limited operations<br/>Semantic constraints]
+    
+    %% Consistency Nodes: Use bright, distinct colors
+    style A fill:#E63946,stroke:#B71C1C,stroke-width:3px
+    style B fill:#F77F00,stroke:#D65A00,stroke-width:3px
+    style C fill:#FCBF49,stroke:#F0A000,stroke-width:3px
+    style D fill:#06FFA5,stroke:#00C49A,stroke-width:3px
+    
+    %% Cost Nodes: Use a dark, strong fill and set text color to white for visibility
+    style A1 fill:#3D3D3D,stroke:#E63946,stroke-width:2px,color:#FFFFFF
+    style B1 fill:#3D3D3D,stroke:#F77F00,stroke-width:2px,color:#FFFFFF
+    style C1 fill:#3D3D3D,stroke:#FCBF49,stroke-width:2px,color:#FFFFFF
+    style D1 fill:#3D3D3D,stroke:#06FFA5,stroke-width:2px,color:#FFFFFF
