@@ -784,10 +784,11 @@ and extended with discrete-event simulation of merge queue strategies.
 Pipeline speed has an order of magnitude of untouched headroom in most orgs.
 """)
 
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "Valley of Calm Heatmap",
     "Discrete-Event Simulation",
     "Scenario Comparison",
+    "Deployment Pipeline",
 ])
 
 
@@ -1153,3 +1154,248 @@ with st.expander("Experiment Ideas"):
     This is the empirical version of the utilization threshold from
     queueing theory.
     """)
+
+
+# ============================================================================
+# TAB 4 — DEPLOYMENT PIPELINE
+# ============================================================================
+# Formulas duplicated from ai-dev-tools/scripts/mq/simulate.py (canonical source).
+# ~60 lines of pure math kept here to avoid cross-repo import.
+
+_DEPLOY_MATURITY_DIMS = {
+    "automated_testing":  {"weight": 2.0, "label": "Automated Testing"},
+    "canary_deployment":  {"weight": 2.0, "label": "Canary Deployment"},
+    "automated_rollback": {"weight": 1.5, "label": "Automated Rollback"},
+    "observability":      {"weight": 1.5, "label": "Observability"},
+    "wave_deployment":    {"weight": 1.0, "label": "Wave Deployment"},
+    "feature_flags":      {"weight": 1.0, "label": "Feature Flags"},
+    "blue_green":         {"weight": 0.5, "label": "Blue/Green"},
+}
+_DEPLOY_MAX_SCORE = sum(d["weight"] for d in _DEPLOY_MATURITY_DIMS.values())
+
+def _deploy_batch_success(defect_rate: float, batch_size: float) -> float:
+    if batch_size <= 0 or defect_rate <= 0:
+        return 1.0
+    if defect_rate >= 1.0:
+        return 0.0
+    return (1.0 - defect_rate) ** batch_size
+
+def _deploy_maturity_score(caps: dict) -> tuple:
+    weighted = sum(
+        max(0.0, min(1.0, caps.get(k, 0.0))) * d["weight"]
+        for k, d in _DEPLOY_MATURITY_DIMS.items()
+    )
+    score = round(weighted, 1)
+    if score < 4.0:
+        tier = "foundational"
+    elif score < 7.0:
+        tier = "intermediate"
+    else:
+        tier = "advanced"
+    multiplier = round(max(0.3, 1.0 - score / (_DEPLOY_MAX_SCORE * 1.43)), 2)
+    return score, tier, multiplier
+
+def _deploy_rollback(stacked: int) -> tuple:
+    if stacked <= 1:
+        return True, "rollback", 1.0
+    if stacked <= 3:
+        return True, "rollback", 1.5
+    return False, "roll-forward", 2.5
+
+def _deploy_calamity_max_safe(defect_rate: float, target: float = 0.70) -> float:
+    if defect_rate <= 0 or defect_rate >= 1.0:
+        return float("inf") if defect_rate <= 0 else 0.0
+    return math.log(target) / math.log(1.0 - defect_rate)
+
+
+with tab4:
+    st.header("Deployment Pipeline — Batch Release & Rollback Risk")
+
+    st.markdown("""
+    Extends Joe Magerramov's merge-batch model to the **deployment** stage:
+    batch releases (daily/weekly trains), rollback feasibility when releases
+    stack, and deployment maturity scoring across 7 dimensions.
+    """)
+
+    st.subheader("Configuration")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        dp_defect_inv = st.slider(
+            "Defect rate (1-in-N PRs)", 10, 500, 100, 10, key="dp_defect")
+        dp_cadence = st.selectbox(
+            "Release cadence",
+            ["Continuous (CD)", "Daily train", "Weekly train", "Bi-weekly"],
+            key="dp_cadence",
+        )
+        dp_prs = st.slider("PRs per release", 1, 200, 25, 1, key="dp_prs")
+    with col_b:
+        dp_stacked = st.slider(
+            "Releases stacked since clean state", 1, 10, 1, key="dp_stacked")
+        st.markdown("**Deployment maturity** (0.0 = absent, 1.0 = fully implemented)")
+        dp_caps = {}
+        for dim_key, dim_info in _DEPLOY_MATURITY_DIMS.items():
+            dp_caps[dim_key] = st.slider(
+                dim_info["label"], 0.0, 1.0, 0.5, 0.1, key=f"dp_{dim_key}")
+
+    dp_defect_rate = 1.0 / dp_defect_inv
+
+    if st.button("Analyze Deployment Risk", type="primary", key="btn_deploy"):
+        # --- Visualization 1: Release Success Heatmap ---
+        st.subheader("Release Train Success Heatmap")
+        prs_range = np.arange(1, 201, 5)
+        defect_range = np.array([1/x for x in range(10, 510, 10)])
+        z_release = np.array([
+            [_deploy_batch_success(dr, pr) * 100 for dr in defect_range]
+            for pr in prs_range
+        ])
+        fig_heat = go.Figure(data=go.Heatmap(
+            z=z_release,
+            x=[f"1/{int(1/d)}" for d in defect_range],
+            y=[str(int(p)) for p in prs_range],
+            colorscale="RdYlGn",
+            zmin=0, zmax=100,
+            colorbar=dict(title="Success %"),
+        ))
+        current_success = _deploy_batch_success(dp_defect_rate, dp_prs)
+        fig_heat.add_annotation(
+            x=f"1/{dp_defect_inv}", y=str(dp_prs),
+            text=f"YOU: {current_success*100:.0f}%",
+            showarrow=True, arrowhead=2, arrowsize=1.5,
+            font=dict(size=14, color="white"),
+            bgcolor="rgba(0,0,0,0.7)",
+        )
+        fig_heat.update_layout(
+            xaxis_title="Defect rate (1-in-N)",
+            yaxis_title="PRs per release",
+            height=500,
+        )
+        st.plotly_chart(fig_heat, use_container_width=True)
+
+        # --- Visualization 2: Rollback Decision Chart ---
+        st.subheader("Rollback Feasibility vs Stacked Releases")
+        stacked_range = list(range(1, 11))
+        mttr_vals = []
+        strategies = []
+        colors = []
+        for s in stacked_range:
+            can_rb, strat, mttr_mult = _deploy_rollback(s)
+            mttr_vals.append(mttr_mult)
+            strategies.append(strat)
+            colors.append("green" if can_rb else "red")
+
+        fig_rb = go.Figure()
+        fig_rb.add_trace(go.Bar(
+            x=stacked_range, y=mttr_vals,
+            marker_color=colors,
+            text=[f"{s}<br>×{m}" for s, m in zip(strategies, mttr_vals)],
+            textposition="outside",
+        ))
+        fig_rb.add_shape(type="line",
+            x0=0.5, x1=10.5, y0=1.0, y1=1.0,
+            line=dict(color="blue", width=2, dash="dash"),
+        )
+        fig_rb.add_annotation(x=5, y=1.0, text="Baseline MTTR",
+            showarrow=False, yshift=10, font=dict(color="blue"))
+        fig_rb.add_vline(x=dp_stacked, line_dash="dot",
+            line_color="orange", annotation_text="Current")
+        fig_rb.update_layout(
+            xaxis_title="Releases stacked since clean deploy",
+            yaxis_title="MTTR multiplier",
+            height=400,
+        )
+        st.plotly_chart(fig_rb, use_container_width=True)
+
+        # --- Visualization 3: Maturity Impact Comparison ---
+        st.subheader("Maturity Impact on Release Success")
+        profiles = {
+            "Foundational": {k: 0.1 for k in _DEPLOY_MATURITY_DIMS},
+            "Intermediate": {k: 0.5 for k in _DEPLOY_MATURITY_DIMS},
+            "Advanced": {k: 0.9 for k in _DEPLOY_MATURITY_DIMS},
+            "Your Config": dp_caps,
+        }
+        fig_mat = go.Figure()
+        prs_sweep = list(range(1, 101))
+        tier_colors = {
+            "Foundational": "red", "Intermediate": "orange",
+            "Advanced": "green", "Your Config": "blue",
+        }
+        for label, caps in profiles.items():
+            _, _, mult = _deploy_maturity_score(caps)
+            adjusted = []
+            for pr_count in prs_sweep:
+                raw = _deploy_batch_success(dp_defect_rate, pr_count)
+                adj = min(1.0, raw + (1.0 - raw) * (1.0 - mult))
+                adjusted.append(adj * 100)
+            fig_mat.add_trace(go.Scatter(
+                x=prs_sweep, y=adjusted, name=label,
+                line=dict(color=tier_colors[label],
+                          width=3 if label == "Your Config" else 1.5,
+                          dash="solid" if label == "Your Config" else "dash"),
+            ))
+        fig_mat.add_hline(y=70, line_dash="dot", line_color="red",
+            annotation_text="Calamity threshold (70%)")
+        fig_mat.add_vline(x=dp_prs, line_dash="dot", line_color="gray",
+            annotation_text="Current batch size")
+        fig_mat.update_layout(
+            xaxis_title="PRs per release",
+            yaxis_title="Adjusted success rate (%)",
+            height=400,
+        )
+        st.plotly_chart(fig_mat, use_container_width=True)
+
+        # --- Visualization 4: Blue/Red Gauge ---
+        st.subheader("Deployment Risk Gauge")
+        score, tier, risk_mult = _deploy_maturity_score(dp_caps)
+        raw_success = _deploy_batch_success(dp_defect_rate, dp_prs)
+        adj_success = min(1.0, raw_success + (1.0 - raw_success) * (1.0 - risk_mult))
+        max_safe = _deploy_calamity_max_safe(dp_defect_rate)
+
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=adj_success * 100,
+            delta={"reference": 70, "increasing": {"color": "green"}},
+            title={"text": "Adjusted Release Success (%)"},
+            gauge={
+                "axis": {"range": [0, 100]},
+                "bar": {"color": "royalblue"},
+                "steps": [
+                    {"range": [0, 50], "color": "#ffcccc"},
+                    {"range": [50, 70], "color": "#fff3cd"},
+                    {"range": [70, 90], "color": "#d4edda"},
+                    {"range": [90, 100], "color": "#c3e6cb"},
+                ],
+                "threshold": {
+                    "line": {"color": "red", "width": 4},
+                    "thickness": 0.75,
+                    "value": 70,
+                },
+            },
+        ))
+        fig_gauge.update_layout(height=300)
+        st.plotly_chart(fig_gauge, use_container_width=True)
+
+        # Summary metrics
+        can_rb, strategy, mttr_mult = _deploy_rollback(dp_stacked)
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Raw Success", f"{raw_success*100:.1f}%")
+        col2.metric("Adjusted Success", f"{adj_success*100:.1f}%",
+                     delta=f"{(adj_success - raw_success)*100:+.1f}%")
+        col3.metric("Maturity", f"{score}/{_DEPLOY_MAX_SCORE}",
+                     delta=tier)
+        rb_label = f"{'✅' if can_rb else '⚠️'} {strategy}"
+        col4.metric("Recovery", rb_label,
+                     delta=f"×{mttr_mult} MTTR")
+
+        max_safe_str = f"{max_safe:.0f}" if max_safe != float("inf") else "∞"
+        if adj_success * 100 < 70:
+            st.error(
+                f"🔴 **Calamity zone** — {adj_success*100:.1f}% release success is below "
+                f"the 70% threshold. Max safe batch: ~{max_safe_str} PRs.")
+        elif adj_success * 100 < 90:
+            st.warning(
+                f"🟡 **Warning zone** — {adj_success*100:.1f}% release success. "
+                f"Max safe batch: ~{max_safe_str} PRs. Consider smaller trains.")
+        else:
+            st.success(
+                f"🟢 **Healthy** — {adj_success*100:.1f}% release success. "
+                f"Well within safe bounds (max safe: ~{max_safe_str} PRs).")
