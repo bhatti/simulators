@@ -32,6 +32,12 @@ SIMULATORS = {
         'file': 'csi_failure_simulator.py',
         'description': 'Demonstrates how correct systems fail through interactions',
         'concepts': ['CSI failures', 'Schema conflicts', 'Config incoherence', 'API violations']
+    },
+    '5': {
+        'name': 'Delivery Pipeline Simulator',
+        'file': 'delivery_pipeline_simulator.py',
+        'description': 'Monte Carlo + DES of CI/CD merge bottlenecks at agent scale',
+        'concepts': ['Valley of Calm', 'Merge queues', 'Test-impact analysis', 'Speculative batching']
     }
 }
 

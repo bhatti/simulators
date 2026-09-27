@@ -24,6 +24,17 @@ See how two working systems fail when connected. Based on research showing 20% o
 
 **You'll learn**: Why schema mismatches crash systems, how config incoherence causes failures, why testing in isolation isn't enough.
 
+### 5. Delivery Pipeline Simulator (`delivery_pipeline_simulator.py`)
+Explore why CI/CD pipelines become a bottleneck when AI agents generate PRs at 10–100× human pace. Three interactive tabs:
+
+- **Valley of Calm Heatmap**: Monte Carlo sweep of pipeline duration vs. defect rate. Find your team's operating point and see how test-impact analysis, contract testing, and AI review shift it toward the green zone.
+- **Discrete-Event Simulation**: SimPy model with CI runners and reviewers as resources. Watch queue depth, throughput, and cycle time as time-series plots. Compare serial → batching → speculative → scoped-lane strategies.
+- **Scenario Comparison**: Human-only (30 commits/day) vs. agent-augmented (200/day) vs. agent + full tooling. Validates that adding AI generation without adding infrastructure makes every metric worse.
+
+**You'll learn**: Why pipeline duration matters more than defect rate at scale, how batch carryover compounds failures, what throughput agents can actually sustain, and which interventions give the most leverage.
+
+**Try it:** Run with defaults, find your operating point on the heatmap, then toggle "All combined" interventions to see the full tooling stack move you toward the valley of calm.
+
 ## Quick Start
 
 ### Install Dependencies
@@ -46,6 +57,7 @@ streamlit run metastable_simulator.py
 streamlit run cap_consistency_simulator.py
 streamlit run crdt_simulator.py
 streamlit run csi_failure_simulator.py
+streamlit run delivery_pipeline_simulator.py
 ```
 
 The simulators will open in your browser with interactive controls, real-time charts, and educational content.
